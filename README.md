@@ -8,6 +8,7 @@ This repository documents a highly available, secure, and scalable AWS architect
 
 The architecture is deployed in **AWS Region `eu-central-1`** and spans **two Availability Zones (AZs)** to ensure high availability and fault tolerance.
 
+![Architecture Diagram](AWS%20Scalable%20Architecture.png)
 ---
 
 ## 🧩 Key Components

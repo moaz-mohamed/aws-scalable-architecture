@@ -1,67 +1,121 @@
-# Scalable, Highly Available and Secure AWS Architecture
+# Scalable, Highly Available and Secure AWS Infrastructure
+- This project showcases a **Sclalable, Highly Available and Secure Cloud Infrastructure** built on **AWS** using **Terraform** (First Method) and **AWS Management Console** (Second Method). 
+- It utilizes various AWS services such as Route 53, VPC, EC2, RDS, ALB, Auto Scaling, WAF, Cloudwatch, SNS and more to create a robust infrastructure.  
+- It implements a **two-tier architecture**—a scalable web tier using EC2 Auto Scaling, and a data tier using Amazon RDS (MySQL). 
+- A Flask web app is deployed to demonstrate the functionality of the infrastructure.
 
-This project builds a scalable, highly available and secure AWS architecture designed for hosting web applications with fault tolerance, monitoring, and automation. It utilizes various AWS services such as VPC, EC2, RDS, ALB, Auto Scaling, WAF, SNS and more to create a robust infrastructure. 
-
---- 
 
 ## 🌐 Architecture Overview
-The infrastructure is deployed in a single VPC spanning  **two Availability Zones (AZs)** within the **AWS Region`Frankfurt (eu-central-1)`** to ensure high availability and fault tolerance.
 
-It includes public subnets (for ALB, NAT Gateway, Bastion Host) and private subnets (for EC2 Auto Scaling instances and RDS).
-Traffic flows securely from the ALB to private EC2 instances, with outbound internet access via the NAT Gateway.
+- The infrastructure is deployed in a single VPC spanning  **two Availability Zones (AZs)** within the **AWS Region** to ensure high availability and fault tolerance.
+- It includes public subnets (for ALB, NAT Gateway, Bastion Host) and private subnets (for EC2 Auto Scaling instances and RDS). 
+- Traffic flows securely from Route 53 → ALB → private EC2 instances → RDS instance, with outbound internet access via the NAT Gateway.
 
 ![Architecture Diagram](./Images/AWS%20Scalable%20Architecture.png)
 
+##  key Components
+
+| Component | Purpose |
+|----------|---------|
+| **Route 53** | Acts as the DNS service to route user traffic to the Application Load Balancer (ALB) |
+| **VPC** | Custom Virtual Private Cloud with public and private subnets across two AZ for high availability |
+| **Public Subnets** | Hosts the ALB, NAT Gateway, and Bastion Host for secure SSH access |
+| **Private Subnets** | Hosts EC2 instances in an Auto Scaling Group and Amazon RDS database |
+| **Internet Gateway (IGW)** | Provides internet access to public subnets |
+| **NAT Gateway** | Allows EC2 instances in private subnets to access the internet (e.g., for package installs) |
+| **Application Load Balancer (ALB)** | Public-facing, distributes traffic to EC2 instances in private subnets and performs health checks |
+| **Target Groups** | Groups EC2 instances for the ALB to route traffic to |
+| **Auto Scaling Group (ASG)** | Automatically adjusts the number of EC2 instances based on demand, ensuring scalability and fault tolerance |
+| **Launch Template** | Defines the configuration for EC2 instances in the ASG, including AMI, instance type, security group, and key pair |
+| **AMI** | Custom Amazon Machine Image created from a pre-configured EC2 instance with the Flask app installed |
+| **Flask App** | CRUD application running as systemd service on EC2 instances, retrieves database credentials from AWS Secrets Manager and connects to RDS |
+| **EC2 Instances** | Act as the web server (Hosts the Flask web app, launched via AMI) |
+| **Amazon RDS (MySQL, Multi-AZ)** | Managed relational database with automatic failover across AZs |
+| **AWS WAF** | Attached to the ALB for additional protection against commmon web attacks |
+| **AWS Secrets Manager** | Secure storage of database credentials used by the Flask app |
+| **Bastion Host** |  Jump server in a public subnet for secure SSH access to private EC2 instances |
+| **IAM Roles & Policies** |  Secure access control for EC2, RDS, and monitoring services, ensures least-privilege access |
+| **CloudWatch** | Monitors metrics and triggers alarms on failures of any ALB targets |
+| **SNS** | Sends notifications (email alerts) to DevOps engineers upon alarm triggers |
+
 ---
 
-## 🧩 Key Components
+## Implementation Steps using Terraform (First Method)
 
-### 1. **Route 53**
-- Acts as the DNS service to route user traffic to the Application Load Balancer (ALB).
-- Supports routing policies like weighted, latency, and failover.
+The entire infrastructure is provisioned using Terraform with modular structure for better organization and reusability.
 
-### 2. **AWS WAF (Web Application Firewall)**
-- Additional protection against commmon web attacks.
-- Attached to the ALB for filtering and blocking malicious traffic.
 
-### 3. **Internet Gateway (IGW)**
-- Provides internet access to public subnets.
-- Allows users to reach the ALB and Bastion Host.
+### 📦 Modules
 
-### 4. **Application Load Balancer (ALB)**
-- Public-facing ALB distributes incoming web traffic to backend EC2 instances.
-- Supports path-based routing and health checks.
+- `network`: Custom VPC, subnets (public/private), route tables, IGW, and NAT Gateway
+- `security`: Security groups for ALB, EC2, RDS, and Bastion Host
+- `rds`: RDS MySQL instance (Multi-AZ)
+- `secrets`: AWS Secrets Manager for storing RDS credentials
+- `bastion`: Bastion Host for secure SSH access
+- `alb`: Application Load Balancer, Target Groups, Listener, and WAF
+- `asg`: Auto Scaling group, Launch Template, and Auto Scaling Policies
+- `monitoring`: Cloudwatch alarms, SNS topic, and subscription
 
-### 5. **IAM Roles and Policies**
-- Secure access control for EC2, RDS, and monitoring services.
-- Ensures least-privilege principle for automation and user access.
+### 📂 File Structure
 
-### 6. **Public Subnets**
-- **Bastion Host** (for secure SSH access to private EC2s)
-- **NAT Gateway** (to enable outbound internet access for EC2s in private subnets)
+```
+terraform/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── modules/
+│   ├── alb/
+│   ├── asg/
+│   ├── bastion/
+│   ├── monitoring/
+│   ├── network/
+│   ├── rds/
+│   ├── secrets/
+│   └── security/
+```
 
-### 7. **Private Subnets**
-- **Web Servers** (EC2 instances in Auto Scaling group)
-- **Amazon RDS** (primary and standby database instances)
+---
 
-### 8. **Auto Scaling Group**
-- Ensures scalability and high availability of web servers.
-- Automatically adjusts the number of EC2 instances based on demand.
-
-### 9. **Amazon RDS (with Multi-AZ)**
-- Provides a managed relational database with automatic failover.
-- **Primary DB instance** and **Standby instance** are in separate AZs for HA.
+## Deployment Steps
+ 
+### Prerequisites
+- AWS account with necessary permissions to create resources.
+- Terraform installed on your local machine.
+- AWS CLI configured with your credentials.
+- An SSH key pair created for accessing the Bastion Host.
+- Change the `key_name` variable in modules/asg/variables.tf to your SSH key pair name.
+- Create an AMI from a temporary EC2 instance with your application installed and configured.
+- Change the `flask_ami_id` variable in modules/asg/variables.tf to the AMI ID you created.
   
-### 10. **AWS Secrets Manager**
-- Securely stores and manages sensitive information like database credentials.
+### Steps to Deploy
+1. Clone the repo and run
+   ```bash
+   terraform init
+   ```
+2. Set environment variables for RDS credentials
+      ```bash
+   export TF_VAR_db_username="your_db_username" # Set your RDS username
+   export TF_VAR_db_password="your_db_password" # Set your RDS password
+   ```
+   Or enter value when prompted during `terraform apply`
 
-### 11. **CloudWatch & SNS**
-- **CloudWatch** monitors metrics and triggers alarms on failures or performance issues.
-- **SNS** sends notifications (email alerts) to DevOps engineers upon alarm triggers.
+   Or you can create a `terraform.tfvars` file that contains the varaibles
 
----
+3. Run the following commands to deploy the infrastructure
+   ```bash
+   terraform plan # Review the plan before applying
+   terraform apply
+   ```
 
-## 🎯 Implementation Steps using AWS Management Console
+4. Wait for the resources to be created. After successful creation, you will see the ALB DNS name in the output, use it to access the Flask app from the browser.
+[![Flask App](./Images/Flask%20App.png)](./Images/Flask%20App.png)
+
+5. Destroy the infrastructure when done
+    ```bash
+    terraform destroy 
+    ```
+
+## Implementation Steps using AWS Management Console (Second Method)
 
 ### 1️⃣ Networking Setup
 - Created a custom VPC across two Availability Zones.
@@ -72,8 +126,6 @@ Traffic flows securely from the ALB to private EC2 instances, with outbound inte
 - Configured route tables to ensure proper traffic flow between components.
 ![Network Diagram](./Images/Network%20Diagram.png)
 
----
-
 ### 2️⃣ Security Setup
 - Created security groups:
   - **ALB SG**: allows inbound HTTP (port 80) from the internet.
@@ -82,16 +134,12 @@ Traffic flows securely from the ALB to private EC2 instances, with outbound inte
   - **Bastion SG**: allows SSH (port 22) from trusted IPs.
 - Created an **IAM role** for EC2 instances to access AWS Secrets Manager for DB credentials.
 
----
-
 ### 3️⃣ Database Setup
 - Deployed an **Amazon RDS MySQL (Multi-AZ)** instance in private subnets.
 ![RDS](./Images/RDS.png)
 - Attached **RDS SG** to allow access from EC2 instances.
 - Stored RDS credentials securely in **AWS Secrets Manager**.
 ![Secrets Manager](./Images/Secrets%20Manager.png)
-
----
 
 ### 4️⃣ App Server Preparation
 - Launched a temporary EC2 instance in a private subnet.
@@ -100,9 +148,6 @@ Traffic flows securely from the ALB to private EC2 instances, with outbound inte
 - Tested the app locally on port 80.
 - Created an **AMI** from this EC2 instance to be used in **ASG Launch Template**.
 ![AMI](./Images/AMI.png)
-
----
-
 
 ### 5️⃣ Auto Scaling + ALB
 - Created a **Launch Template** using the custom **AMI**.
@@ -122,17 +167,12 @@ Traffic flows securely from the ALB to private EC2 instances, with outbound inte
   ![ALB](./Images/ALB.png)
   ![ALB with ASG](./Images/ALB%20with%20ASG.png)
 
----
-
 ### 6️⃣ Security Hardening
 - Attached **AWS WAF** to ALB with rules to block common web attacks (SQL injection, XSS).
 ![WAF](./Images/WAF.png)
----
 
 ### 7️⃣ Bastion Host
 - Deployed a **Bastion Host** in a public subnet for secure SSH access to private EC2 instances.
-
----
 
 ### 8️⃣ Monitoring + Notifications
 - Configured **CloudWatch alarm** to trigger when the ALB has unhealthy hosts.
@@ -142,7 +182,6 @@ Traffic flows securely from the ALB to private EC2 instances, with outbound inte
 - Configured the alarm to send notifications to the SNS topic when triggered.
 ![Alarm Trigger](./Images/Alarm%20Trigger.png)
 
----
 
 ## 🔐 Security Considerations
 
@@ -152,6 +191,9 @@ Traffic flows securely from the ALB to private EC2 instances, with outbound inte
 - **IAM roles** applied to control access to AWS services with least-privilege permissions.
 - **AWS WAF** provides an additional layer of security against common web attacks.
 - **AWS Secrets Manager** is used to securely store and manage database credentials.
-  
+
 ---
+
+This project was developed during my learning journey to prepare for **AWS Certified Solutions Architect - Associate** certification. Feel free to reach out if you have any questions or suggestions for improvements 
+[LinkedIn](https://www.linkedin.com/in/moaz-farrag) - [Email](mailto:moaz.farrag@outlook.com)
 
